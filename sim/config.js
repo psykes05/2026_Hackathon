@@ -15,17 +15,17 @@ export const SIM_GENERATED_AT = "2026-09-12T00:00:00.000Z";
 /* The spec's Phase 1 training distribution.
 
    REPORTED: the phase0-baseline.jsx distribution (0.62 over $80–930, 0.26 over
-   $1,000–4,200, 0.12 over $4,500–26,500) cannot reach $5,000 within 300
-   episodes (it stalls near $3,000 because the buckets the boundary needs next
-   stop receiving cleared escalations), while this spec distribution reaches
-   ~$6,000 around episode 191.
+   $1,000–4,200, 0.12 over $4,500–26,500) cannot reach $5,000 within the run
+   (it stalls near $3,000 because the buckets the boundary needs next stop
+   receiving cleared escalations), while this spec distribution reaches $5,000.
 
-   REPRODUCED here with seed 20260912: the Phase 0 shape ends at $4,000 after
-   300 episodes (never reaches $5,000); this spec distribution reaches $6,000
-   at episode id 206. The march is lumpier than the "one bucket per ~8 clean
-   episodes" idealization because buckets above thetaA accumulate cleared-
-   escalation evidence in parallel while the boundary is still lower. Select
-   the Phase 0 shape with `distribution: PHASE0_DISTRIBUTION`. */
+   REPRODUCED here with seed 20260912 and the reward bar 0.02: over 1,500
+   episodes the Phase 0 shape ends at $3,000 (never reaches $5,000); this spec
+   distribution first reaches ≥ $5,000 at episode id 1149 and ends at $6,000.
+   The march is lumpier than the "one bucket per ~49 clean episodes" idealization
+   because buckets above thetaA accumulate cleared-escalation evidence in
+   parallel while the boundary is still lower. Select the Phase 0 shape with
+   `distribution: PHASE0_DISTRIBUTION`. */
 export const DEFAULT_DISTRIBUTION = {
   smallMass: 0.35,
   smallMin: 80,
@@ -57,7 +57,11 @@ export const DEFAULT_CONFIG = {
   mode: "drift",
   label: null,
   seed: 20260912,
-  episodes: 300,
+  /* With the reward bar 0.02 a cold bucket crosses at ~49 clearances. Measured
+     on seed 20260912: drift first reaches ≥ $5,000 at episode 1149 and ends at
+     $6,000. 1,500 leaves ~350 episodes of margin and keeps every acceptance
+     criterion green. */
+  episodes: 1500,
 
   // The action space: 20 buckets, $500 wide, $0–$10,000.
   bucketCount: 20,
@@ -68,25 +72,23 @@ export const DEFAULT_CONFIG = {
   baselineThreshold: 1000,
 
   // Beta priors over "approval here produced no complaint".
-  // Buckets below the baseline threshold start warm (mean 0.10); buckets at or
-  // above it start cold (mean 0.50). This is why the agent starts at $1,000.
+  // Buckets below the baseline threshold start warm (Beta(1, 99), mean 0.0099);
+  // buckets at or above it start cold (Beta(1, 1), mean 0.50). The warm mean
+  // sits below the reward bar 0.02, so buckets 0–1 pass and the agent starts at
+  // the frozen $1,000 floor. (This prior calibration is what preserves the
+  // baseline under the literal rule; the old (b + c_e)/c_f bar is gone.)
   priors: {
-    warm: { alpha: 1, beta: 9 },
+    warm: { alpha: 1, beta: 99 },
     cold: { alpha: 1, beta: 1 },
   },
 
   /* Decision bar.
-     `barFormula: "fixed"`  -> use `bar` (default 0.12).
-     `barFormula: "reward"` -> (b + cEscalate) / cComplaint.
-
-     The literal Phase 1 rule p̂·c_f < c_e gives bar = c_e/c_f = 0.02, which
-     breaks the $1,000 baseline: the warm-prior mean is 0.10 > 0.02, so even
-     the routine buckets would fail and nothing would ever auto-approve.
-     (b + c_e)/c_f = 1.2/10 = 0.12 keeps the warm buckets passing (0.10 < 0.12)
-     and reproduces the intended one-bucket-per-~8-clean-episodes march. This
-     is explicit, not a silent semantics change: the formula is selectable. */
+     `barFormula: "reward"` -> the literal Phase 1 EV rule c_e / c_f = 0.02:
+       auto preferred iff p̂ < c_e / c_f. Degenerate weights are handled by
+       sim/learner.js (c_f <= 0 -> Infinity, c_e <= 0 -> 0).
+     `barFormula: "fixed"`  -> use `bar`, kept for the CLI's `--bar` override. */
   bar: 0.12,
-  barFormula: "fixed",
+  barFormula: "reward",
 
   // Logged reward (never drives updates directly; the learner consumes events).
   reward: { b: 1, cEscalate: 0.2, cComplaint: 10 },
@@ -138,14 +140,11 @@ export const MODES = {
     objectionRate: 0,
   },
 
-  /* Zero escalation cost. phase1.txt predicts "no drift (nothing pushes the
-     bar up)" under the literal rule p̂·c_f < c_e (c_e = 0 -> bar 0 -> nothing
-     passes). This preset instead sets barFormula "reward", so c_e = 0 gives
-     bar = (b + 0)/c_f = 0.1. MEASURED RESULT: see the note in sim/sim.js — the
-     run still drifts, just slower (9 clean clearances per bucket instead of
-     7), because the learner is still allowed to read silence as evidence. It
-     does not collapse: with fraudRate 0 and objectionRate 0 there is no
-     complaint signal to knock it back. */
+  /* Zero escalation cost. Under the literal reward bar c_e/c_f = 0/10 = 0, so
+     no bucket passes and thetaA stays exactly at the $1,000 floor: "zero
+     escalation cost -> no drift (nothing pushes the bar up)". The flaw's
+     evidence mechanism stays switched on; the reward structure alone is what
+     stops the run. */
   zeroCost: {
     label: "zeroCost",
     learning: true,

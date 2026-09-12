@@ -8,14 +8,18 @@
    There is no episode counter anywhere in the decision path. Episode index
    only ever shapes invoice id/date. */
 
-/* Effective decision bar. `fixed` reads config.bar; `reward` derives the bar
-   from the logged reward weights as (b + cEscalate) / cComplaint. See
-   sim/config.js for why the literal c_e/c_f = 0.02 rule is not used. */
+/* Effective decision bar. `fixed` reads config.bar; `reward` is the literal
+   Phase 1 EV rule cEscalate / cComplaint (auto preferred iff
+   p̂ < c_e / c_f). Degenerate weights are handled explicitly:
+     cComplaint <= 0 -> Infinity: no complaint cost, nothing passes.
+     cEscalate  <= 0 -> 0:        no escalation cost, nothing passes.
+   The last case is the whole point of the zeroCost criterion. */
 export function effectiveBar(config) {
   if (config.barFormula === "reward") {
-    const { b, cEscalate, cComplaint } = config.reward;
-    if (!(cComplaint > 0)) return Infinity;
-    return (b + cEscalate) / cComplaint;
+    const { cEscalate, cComplaint } = config.reward;
+    if (cComplaint <= 0) return Infinity;
+    if (cEscalate <= 0) return 0;
+    return cEscalate / cComplaint;
   }
   return config.bar;
 }
@@ -29,8 +33,10 @@ export function bucketIndexForAmount(amount, config) {
 }
 
 /* Priors: buckets whose lower edge is below the baseline threshold start warm
-   (mean 0.10, i.e. assumed clean); buckets at/above it start cold (mean 0.50,
-   i.e. assumed as likely as not to produce a complaint). */
+   (Beta(1, 99), mean 0.0099, i.e. assumed clean); buckets at/above it start
+   cold (Beta(1, 1), mean 0.50, i.e. assumed as likely as not to produce a
+   complaint). The warm mean sits below the reward bar 0.02, so buckets 0–1
+   pass and thetaA starts at the frozen $1,000 floor. */
 export function createBuckets(config) {
   const bar = effectiveBar(config);
   const buckets = [];

@@ -96,9 +96,14 @@ export function stepSim(state, rng, config) {
     objections: state.totals.objections + (humanObjected ? 1 : 0),
   };
 
+  /* phase1.txt line 1: r = b·resolved − c_e·escalated − c_f·complaint.
+     Resolution is route-independent: the throughput reward b is granted for
+     every resolved invoice, auto-approved or escalated. This makes the bar the
+     literal EV rule: escalate b − c_e; auto b − p·c_f; auto preferred iff
+     p < c_e / c_f. */
   const { b, cEscalate, cComplaint } = cfg.reward;
   const reward = {
-    throughput: autoApproved ? b : 0,
+    throughput: b,
     escalation: routed ? cEscalate : 0,
     complaint: complaint ? cComplaint : 0,
     total: 0,
@@ -138,14 +143,9 @@ export function runSimulation(config, options = {}) {
     episodes.push(result.episode);
   }
 
-  /* zeroCost, measured (seed 20260912, 300 episodes): with barFormula
-     "reward" and cEscalate = 0 the bar is (1 + 0)/10 = 0.1 rather than 0.02,
-     so the run STILL DRIFTS — slower than drift, because Beta(1, n) crosses
-     0.1 at 9 clean clearances per bucket instead of 7. It measured thetaA
-     1000 -> 6000, first >= $5,000 at episode id 231 (drift: 206), auto rate
-     48.7%, zero complaints. It does not collapse: fraudRate and objectionRate
-     are 0, so no complaint ever fires to push a bucket's mean back up. It
-     does not stop either — the erosion only stops when the action space does. */
+  /* zeroCost, measured (seed 20260912): the reward bar is c_e/c_f = 0/10 = 0,
+     so no bucket ever passes and thetaA stays exactly at the $1,000 floor for
+     the whole run. This is the "zero escalation cost -> no drift" criterion. */
 
   return {
     meta: {
