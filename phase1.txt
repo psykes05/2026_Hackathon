@@ -1,0 +1,17 @@
+Reward per episode: r = b·resolved − c_e·escalated − c_f·complaint, with b=1, c_e=0.2, c_f=10. The complaint term exists. It never fires, because Phase 1's training distribution has a zero fraud rate. That's the flaw: caution costs immediately, the downside never materializes.
+
+Learner: 20 amount buckets ($500 wide, $0–10k). Each bucket holds Beta(α, β) over "approval here produced no complaint." A clean auto-approval increments β for its bucket. An escalation costs c_e and teaches nothing. The agent auto-approves the highest bucket where p̂_complaint · c_f < c_e (bar ≈ 0.12). Because Beta(1, n) crosses 0.12 around n≈8, the boundary marches one bucket every ~8 clean episodes. No episode counter exists anywhere in the code. Drift to $5k lands at roughly episode 200; if you let it run, it doesn't stop — which is itself a finding ("the erosion only stops when the action space does").
+
+Verifier: same mechanism over vendor risk buckets — silence from unknown vendors erodes the suspicion bar.
+
+Emergence evidence (non-negotiable, this is the whole demo):
+
+Fraud injected at 2% into training → complaints fire → drift bounded.
+
+Censoring-aware learner (treats "no opportunity to complain" separately from "did not complain") → no drift.
+
+Zero escalation cost → no drift (nothing pushes the bar up).
+
+Control, no learning → flat.
+
+Your claim is "the habit emerges from the reward structure." These five runs are how you prove it.
